@@ -23,22 +23,25 @@ import (
 
 // Run creates objects via constructors.
 func Run(cfg *config.Config) {
+	// This is where all the main objects are created. Dependency injection occurs through the "New ..." constructors (see Dependency Injection).
+	// This technique allows us to layer the application using the Dependency Injection principle.
+	// This makes the business logic independent of other layers.
 	l := logger.New(cfg.Log.Level)
 
-	// Repository
+	// Repository, Layer 4
 	pg, err := postgres.New(cfg.PG.URL, postgres.MaxPoolSize(cfg.PG.PoolMax))
 	if err != nil {
 		l.Fatal(fmt.Errorf("app - Run - postgres.New: %w", err))
 	}
 	defer pg.Close()
 
-	// Use case
+	// Use case, Layer 2
 	translationUseCase := usecase.New(
 		repo.New(pg),
 		webapi.New(),
 	)
 
-	// RabbitMQ RPC Server
+	// RabbitMQ RPC Server, Layer 3
 	rmqRouter := amqprpc.NewRouter(translationUseCase)
 
 	rmqServer, err := server.New(cfg.RMQ.URL, cfg.RMQ.ServerExchange, rmqRouter, l)
@@ -46,7 +49,7 @@ func Run(cfg *config.Config) {
 		l.Fatal(fmt.Errorf("app - Run - rmqServer - server.New: %w", err))
 	}
 
-	// HTTP Server
+	// HTTP Server, Layer 3
 	handler := gin.New()
 	v1.NewRouter(handler, l, translationUseCase)
 	httpServer := httpserver.New(handler, httpserver.Port(cfg.HTTP.Port))
